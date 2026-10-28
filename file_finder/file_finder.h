@@ -2,6 +2,7 @@
 #define FILE_FINDER_H
 
 #include <stddef.h>
+#include <stdatomic.h>
 #include <threads.h>
 
 typedef struct MatchNode {
@@ -23,6 +24,7 @@ typedef struct {
 
 typedef struct {
     MatchList *matches;
+    atomic_bool *keep_running;
 } DumperThreadArgs;
 
 int validate_arguments(int argc, char **argv);
@@ -30,6 +32,7 @@ void print_usage(const char *program_name);
 
 int initialize_match_list(MatchList *matches);
 void dump_matches(MatchList *matches);
+void drain_matches(MatchList *matches);
 void add_match(MatchList *matches, const char *filename);
 void free_match_list(MatchList *matches);
 

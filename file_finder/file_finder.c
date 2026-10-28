@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -8,10 +9,14 @@
 
 int validate_arguments(int argc, char **argv)
 {
-    (void)argv;
-
     if (argc < 3) {
         return 1;
+    }
+
+    for (int index = 2; index < argc; ++index) {
+        if (argv[index] == NULL || argv[index][0] == '\0') {
+            return 1;
+        }
     }
 
     return 0;
@@ -42,10 +47,37 @@ void dump_matches(MatchList *matches)
         return;
     }
 
+    if (matches->head == NULL) { 
+        printf("No matches found.\n");
+        mtx_unlock(&matches->mutex);
+        return;
+    }
     for (node = matches->head; node != NULL; node = node->next) {
         printf("%s\n", node->filename);
     }
 
+    mtx_unlock(&matches->mutex);
+}
+
+void drain_matches(MatchList *matches)
+{
+    MatchNode *node;
+
+    if (matches == NULL || mtx_lock(&matches->mutex) != thrd_success) {
+        return;
+    }
+
+    node = matches->head;
+    while (node != NULL) {
+        MatchNode *next = node->next;
+        printf("%s\n", node->filename);
+        free(node->filename);
+        free(node);
+        node = next;
+    }
+
+    matches->head = NULL;
+    matches->tail = NULL;
     mtx_unlock(&matches->mutex);
 }
 
@@ -164,6 +196,11 @@ void scan_directory(const char *directory, const char *substring,
             scan_directory(full_path, substring, matches);
         } else if (strstr(entry->d_name, substring) != NULL) {
             add_match(matches, entry->d_name);
+            {
+                //Adding 500msec pause for testing purpose. Especially to test periodic_dunp
+                const struct timespec delay = {0, 500000000};
+                thrd_sleep(&delay, NULL);
+            }
         }
     }
 
@@ -184,8 +221,22 @@ int search_thread(void *argument)
 
 int periodic_dumper_thread(void *argument)
 {
-    (void)argument;
-    /* TODO: Periodically dump and clear the shared match container. */
+    DumperThreadArgs *args = (DumperThreadArgs *)argument;
+    const struct timespec interval = {1, 0};
+
+    if (args == NULL || args->matches == NULL ||
+        args->keep_running == NULL) {
+        return 1;
+    }
+
+    while (atomic_load(args->keep_running)) {
+        thrd_sleep(&interval, NULL);
+        if (atomic_load(args->keep_running)) {
+            printf("Periodic dump\n");
+            drain_matches(args->matches);
+        }
+    }
+
     return 0;
 }
 
