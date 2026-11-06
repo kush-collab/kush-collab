@@ -13,6 +13,7 @@ int validate_arguments(int argc, char **argv)
         return 1;
     }
 
+    //Check for empty substrings
     for (int index = 2; index < argc; ++index) {
         if (argv[index] == NULL || argv[index][0] == '\0') {
             return 1;
@@ -170,6 +171,7 @@ void scan_directory(const char *directory, const char *substring,
         int written;
         size_t name_length;
 
+        // Skip the current and parent directory entries to avoid infinite recursion.
         if (strcmp(entry->d_name, ".") == 0 ||
             strcmp(entry->d_name, "..") == 0) {
             continue;
