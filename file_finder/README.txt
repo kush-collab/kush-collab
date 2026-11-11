@@ -23,6 +23,7 @@ While the search is running, type one of these commands and press Enter:
     exit   stop all searches, release resources and quit
 
 The program also exits on its own once every search thread has finished.
+Pressing Ctrl+C stops the search the same way as "exit".
 
 
 Requested features and how they are implemented
@@ -70,6 +71,9 @@ Requested features and how they are implemented
      unwind normally, closing every directory they opened.
    - The dumper thread checks it on every tick.
    - Matches still pending at exit are discarded, not printed.
+   - Ctrl+C is handled too: the signal handler only sets a flag, and the
+     console loop turns it into the same shutdown as "exit", so threads are
+     still joined and memory is freed.
 
 8. Resource cleanup
    - main() joins every thread that was created before freeing anything, so
@@ -103,6 +107,8 @@ Error handling
    - If joining a thread or unlocking the mutex fails, the program exits
      immediately, because freeing shared memory that another thread may
      still use would be unsafe.
+   - Error text is printed with perror rather than strerror, because
+     strerror may return a buffer shared between threads.
 
 Why a single mutex and a linked list
    Searching the file system is much slower than appending to a list, so a

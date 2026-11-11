@@ -62,6 +62,18 @@ int initialize_match_list(MatchList *matches)
     return mtx_init(&matches->mutex, mtx_plain) == thrd_success ? 0 : 1;
 }
 
+/* Prints "<message> <path>: <reason for errno>" to stderr.
+   perror is used instead of strerror, which may share one buffer between threads. */
+void report_errno(const char *message, const char *path)
+{
+    int saved_errno = errno;
+    char prefix[MAX_PATH_SIZE + 64];
+
+    snprintf(prefix, sizeof(prefix), "%s %s", message, path);
+    errno = saved_errno; /* snprintf may change errno before perror reads it. */
+    perror(prefix);
+}
+
 /* Releases the match list mutex and exits the process if unlocking fails. */
 static void unlock_matches(MatchList *matches)
 {
@@ -204,7 +216,7 @@ int scan_directory(const char *directory, const char *substring,
        is a subfolder: warn, skip it and let the search continue. */
     directory_handle = opendir(directory);
     if (directory_handle == NULL) {
-        fprintf(stderr, "Warning: skipping directory %s: %s\n", directory, strerror(errno));
+        report_errno("Warning: skipping directory", directory);
         return 0;
     }
 
@@ -219,8 +231,7 @@ int scan_directory(const char *directory, const char *substring,
         if (entry == NULL) {
             /* A read error skips the rest of this folder instead of stopping the search. */
             if (errno != 0) {
-                fprintf(stderr, "Warning: stopped reading directory %s: %s\n",
-                        directory, strerror(errno));
+                report_errno("Warning: stopped reading directory", directory);
             }
             break;
         }
@@ -249,7 +260,7 @@ int scan_directory(const char *directory, const char *substring,
 
         /* An entry we cannot inspect is skipped; the rest of the folder is still searched. */
         if (stat(full_path, &file_status) != 0) {
-            fprintf(stderr, "Warning: skipping %s: %s\n", full_path, strerror(errno));
+            report_errno("Warning: skipping", full_path);
             continue;
         }
 
@@ -275,7 +286,7 @@ int scan_directory(const char *directory, const char *substring,
     }
 
     if (closedir(directory_handle) != 0) {
-        fprintf(stderr, "Failed to close directory %s: %s\n", directory, strerror(errno));
+        report_errno("Failed to close directory", directory);
         status = 1;
     }
     return status;

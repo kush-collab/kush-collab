@@ -17,6 +17,16 @@
 /* Longest accepted command line, including the terminating null byte. */
 #define COMMAND_SIZE 32
 
+/* Set by Ctrl+C. A signal handler may only safely set a flag like this;
+   the console loop turns it into the same shutdown as "exit". */
+static volatile sig_atomic_t interrupted = 0;
+
+static void handle_interrupt(int signal_number)
+{
+    (void)signal_number;
+    interrupted = 1;
+}
+
 static int handle_commands(MatchList *matches, atomic_bool *keep_running,
                            atomic_size_t *active_searches)
 {
@@ -31,6 +41,11 @@ static int handle_commands(MatchList *matches, atomic_bool *keep_running,
         char character;
         ssize_t count;
 
+        /* Ctrl+C behaves exactly like typing exit. */
+        if (interrupted) {
+            atomic_store(keep_running, false);
+            break;
+        }
         if (ready < 0) {
             if (errno == EINTR) {
                 continue;
@@ -126,7 +141,7 @@ int main(int argc, char **argv)
     /* A bad starting directory is a real error; unreadable subfolders are only skipped later. */
     DIR *start_directory = opendir(argv[1]);
     if (start_directory == NULL) {
-        fprintf(stderr, "Cannot open directory %s: %s\n", argv[1], strerror(errno));
+        report_errno("Cannot open directory", argv[1]);
         return 1;
     }
     closedir(start_directory);
@@ -134,6 +149,11 @@ int main(int argc, char **argv)
     /* Let output failures reach normal error handling instead of killing the process. */
     if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
         perror("Failed to configure output error handling");
+        return 1;
+    }
+    /* Route Ctrl+C through the normal shutdown so threads are joined and memory freed. */
+    if (signal(SIGINT, handle_interrupt) == SIG_ERR) {
+        perror("Failed to configure Ctrl+C handling");
         return 1;
     }
     if (printf("Search directory: %s\nSubstring count: %zu\n"

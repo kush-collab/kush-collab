@@ -36,6 +36,7 @@ int validate_arguments(int argc, char **argv);
 void print_usage(const char *program_name);
 
 int initialize_match_list(MatchList *matches);
+void report_errno(const char *message, const char *path);
 int dump_matches(MatchList *matches);
 int add_match(MatchList *matches, const char *filename);
 void free_match_list(MatchList *matches);
